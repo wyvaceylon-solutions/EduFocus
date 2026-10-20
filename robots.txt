@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://wyvaceylon-solutions.github.io/EduFocus/sitemap.xml
