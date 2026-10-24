@@ -634,5 +634,45 @@ setInterval(checkDueReminders,15000);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 </script>
+
+<script>
+/* Privacy-friendly GA4 feature usage tracking. No names, ages, gender, task text, notes, or study content are sent. */
+(function(){
+  function trackFeature(feature, action){
+    if(typeof window.gtag !== 'function') return;
+    window.gtag('event', 'feature_use', {
+      feature_name: feature,
+      action_type: action
+    });
+  }
+  document.querySelectorAll('.tabs .tab[data-tab]').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      var names = {home:'home',timerTab:'timer',planner:'planner',studyHub:'study_hub',progress:'progress'};
+      trackFeature(names[tab.getAttribute('data-tab')] || 'navigation', 'open');
+    });
+  });
+  var clickTargets = [
+    ['startPause','pomodoro_timer','start_or_pause'],
+    ['stopwatchStart','stopwatch','start'],
+    ['saveExam','exam_countdown','save_exam'],
+    ['saveDailyGoal','daily_goal','save_goal']
+  ];
+  clickTargets.forEach(function(item){
+    var el=document.getElementById(item[0]);
+    if(el) el.addEventListener('click',function(){trackFeature(item[1],item[2]);});
+  });
+  [
+    ['taskForm','planner','add_task'],
+    ['examManagerForm','planner','add_exam'],
+    ['noteForm','study_notes','save_note'],
+    ['flashcardForm','flashcards','add_flashcard'],
+    ['reminderForm','reminders','save_reminder']
+  ].forEach(function(item){
+    var el=document.getElementById(item[0]);
+    if(el) el.addEventListener('submit',function(){trackFeature(item[1],item[2]);});
+  });
+})();
+</script>
+
 </body>
 </html>
