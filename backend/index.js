@@ -19,7 +19,11 @@ function json(data, status = 200) {
 function randomString(bytes = 32) {
   const data = crypto.getRandomValues(new Uint8Array(bytes));
   let binary = "";
-  for (const byte of data) binary += String.fromCharCode(byte);
+
+  for (const byte of data) {
+    binary += String.fromCharCode(byte);
+  }
+
   return btoa(binary)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -29,6 +33,7 @@ function randomString(bytes = 32) {
 async function hash(value) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", data);
+
   return Array.from(new Uint8Array(digest))
     .map(b => b.toString(16).padStart(2, "0"))
     .join("");
@@ -52,7 +57,13 @@ async function readBody(request) {
     throw new Error("Payload too large");
   }
 
-  return JSON.parse(text);
+  const body = JSON.parse(text);
+
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Invalid request body");
+  }
+
+  return body;
 }
 
 async function createSession(env, userId) {
@@ -86,7 +97,10 @@ async function authenticate(request, env) {
     SELECT user_id, session_id
     FROM sessions
     WHERE token_hash = ? AND expires_at > ?
-  `).bind(tokenHash, new Date().toISOString()).first();
+  `).bind(
+    tokenHash,
+    new Date().toISOString()
+  ).first();
 }
 
 export default {
@@ -99,6 +113,7 @@ export default {
     const path = url.pathname;
 
     try {
+      // HEALTH CHECK
       if (path === "/" || path === "/api/health") {
         return json({
           app: "EduFocus",
@@ -108,17 +123,21 @@ export default {
       }
 
       if (!env.DB) {
-        return json({ error: "Database not configured" }, 503);
+        return json({
+          error: "Database not configured"
+        }, 503);
       }
 
       // CREATE GUEST ACCOUNT
-      if (path === "/api/guest/create" && request.method === "POST") {
+      if (
+        path === "/api/guest/create" &&
+        request.method === "POST"
+      ) {
         const userId = crypto.randomUUID();
         const recoveryCode = newRecoveryCode();
         const recoveryHash = await hash(recoveryCode);
 
-        const session = await createSession(env, userId);
-
+        // FIRST: Create user and user data
         await env.DB.batch([
           env.DB.prepare(`
             INSERT INTO users (user_id, recovery_code_hash)
@@ -132,6 +151,9 @@ export default {
           `).bind(userId)
         ]);
 
+        // THEN: Create session
+        const session = await createSession(env, userId);
+
         return json({
           success: true,
           userId,
@@ -143,16 +165,21 @@ export default {
       }
 
       // RECOVER GUEST ACCOUNT
-      if (path === "/api/guest/recover" && request.method === "POST") {
+      if (
+        path === "/api/guest/recover" &&
+        request.method === "POST"
+      ) {
         const body = await readBody(request);
         const code = body.recoveryCode;
 
         if (
           typeof code !== "string" ||
-          code.length < 20 ||
-          code.length > 100
+          code.trim().length < 20 ||
+          code.trim().length > 100
         ) {
-          return json({ error: "Invalid recovery code" }, 400);
+          return json({
+            error: "Invalid recovery code"
+          }, 400);
         }
 
         const recoveryHash = await hash(code.trim());
@@ -164,7 +191,9 @@ export default {
         `).bind(recoveryHash).first();
 
         if (!user) {
-          return json({ error: "Invalid recovery code" }, 401);
+          return json({
+            error: "Invalid recovery code"
+          }, 401);
         }
 
         const session = await createSession(env, user.user_id);
@@ -178,16 +207,23 @@ export default {
         });
       }
 
-      // AUTHENTICATION FOR SYNC
+      // CLOUD SYNC
       if (path === "/api/sync") {
-        if (request.method !== "GET" && request.method !== "PUT") {
-          return json({ error: "Method not allowed" }, 405);
+        if (
+          request.method !== "GET" &&
+          request.method !== "PUT"
+        ) {
+          return json({
+            error: "Method not allowed"
+          }, 405);
         }
 
         const user = await authenticate(request, env);
 
         if (!user) {
-          return json({ error: "Unauthorized" }, 401);
+          return json({
+            error: "Unauthorized"
+          }, 401);
         }
 
         // RESTORE DATA
@@ -199,7 +235,9 @@ export default {
           `).bind(user.user_id).first();
 
           if (!data) {
-            return json({ error: "User data not found" }, 404);
+            return json({
+              error: "User data not found"
+            }, 404);
           }
 
           return json({
@@ -210,14 +248,16 @@ export default {
           });
         }
 
-        // SAVE / UPDATE DATA
+        // SAVE DATA
         const body = await readBody(request);
 
         if (
           !Object.prototype.hasOwnProperty.call(body, "coreData") ||
           !Object.prototype.hasOwnProperty.call(body, "addonData")
         ) {
-          return json({ error: "Missing sync data" }, 400);
+          return json({
+            error: "Missing sync data"
+          }, 400);
         }
 
         const coreData = JSON.stringify(body.coreData);
@@ -242,19 +282,31 @@ export default {
         });
       }
 
-      return json({ error: "Endpoint not found" }, 404);
+      return json({
+        error: "Endpoint not found"
+      }, 404);
 
     } catch (error) {
       if (error.message === "Payload too large") {
-        return json({ error: "Payload too large" }, 413);
+        return json({
+          error: "Payload too large"
+        }, 413);
       }
 
-      if (error instanceof SyntaxError) {
-        return json({ error: "Invalid JSON" }, 400);
+      if (
+        error instanceof SyntaxError ||
+        error.message === "Invalid request body"
+      ) {
+        return json({
+          error: "Invalid JSON"
+        }, 400);
       }
 
       console.error("EduFocus API error:", error);
-      return json({ error: "Internal server error" }, 500);
+
+      return json({
+        error: "Internal server error"
+      }, 500);
     }
   }
 };
