@@ -10,8 +10,7 @@
       "database_id": "86613e80-76c4-4199-a49e-c4aebdedb55a"
     }
   ]
-}
-"observability": {
+"observability":
   "logs": {
     "enabled": true,
     "head_sampling_rate": 1,
