@@ -2,5 +2,12 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "edufocus-api",
   "main": "index.js",
-  "compatibility_date": "2026-11-02"
+  "compatibility_date": "2026-11-02",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "edufocus-db",
+      "database_id": "86613e80-76c4-4199-a49e-c4aebdedb55a"
+    }
+  ]
 }
