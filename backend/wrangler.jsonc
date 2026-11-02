@@ -9,20 +9,21 @@
       "database_name": "edufocus-db",
       "database_id": "86613e80-76c4-4199-a49e-c4aebdedb55a"
     }
-  ]
-"observability":
-  "logs": {
-    "enabled": true,
-    "head_sampling_rate": 1,
-    "invocation_logs": true,
-    "persist": true
-  },
-  "traces": {
-    "enabled": false,
-    "head_sampling_rate": 1,
-    "persist": true
-  },
-  "issue_detection": {
-    "enabled": false
+  ],
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true
+    },
+    "issue_detection": {
+      "enabled": false
+    }
   }
 }
