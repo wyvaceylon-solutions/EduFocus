@@ -1,6 +1,8 @@
 
 const SESSION_DAYS = 30;
 const MAX_BODY_SIZE = 1024 * 1024;
+const MAX_NAME_LENGTH = 40;
+const MAX_AVATAR_LENGTH = 100;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -64,6 +66,29 @@ async function readBody(request) {
   }
 
   return body;
+}
+
+function validateProfile(name, avatar) {
+  if (
+    typeof name !== "string" ||
+    !name.trim() ||
+    name.trim().length > MAX_NAME_LENGTH
+  ) {
+    return null;
+  }
+
+  if (
+    typeof avatar !== "string" ||
+    !avatar.trim() ||
+    avatar.trim().length > MAX_AVATAR_LENGTH
+  ) {
+    return null;
+  }
+
+  return {
+    displayName: name.trim(),
+    avatar: avatar.trim()
+  };
 }
 
 async function createSession(env, userId) {
@@ -133,16 +158,35 @@ export default {
         path === "/api/guest/create" &&
         request.method === "POST"
       ) {
+        const body = await readBody(request);
+
+        const profile = validateProfile(
+          body.displayName,
+          body.avatar
+        );
+
+        if (!profile) {
+          return json({
+            error: "A valid display name and avatar are required"
+          }, 400);
+        }
+
         const userId = crypto.randomUUID();
         const recoveryCode = newRecoveryCode();
         const recoveryHash = await hash(recoveryCode);
 
-        // FIRST: Create user and user data
+        // Create user and initial data
         await env.DB.batch([
           env.DB.prepare(`
-            INSERT INTO users (user_id, recovery_code_hash)
-            VALUES (?, ?)
-          `).bind(userId, recoveryHash),
+            INSERT INTO users
+            (user_id, recovery_code_hash, display_name, avatar)
+            VALUES (?, ?, ?, ?)
+          `).bind(
+            userId,
+            recoveryHash,
+            profile.displayName,
+            profile.avatar
+          ),
 
           env.DB.prepare(`
             INSERT INTO user_data
@@ -151,12 +195,15 @@ export default {
           `).bind(userId)
         ]);
 
-        // THEN: Create session
         const session = await createSession(env, userId);
 
         return json({
           success: true,
           userId,
+          profile: {
+            name: profile.displayName,
+            avatar: profile.avatar
+          },
           recoveryCode,
           sessionToken: session.token,
           expiresAt: session.expires,
@@ -185,7 +232,7 @@ export default {
         const recoveryHash = await hash(code.trim());
 
         const user = await env.DB.prepare(`
-          SELECT user_id
+          SELECT user_id, display_name, avatar
           FROM users
           WHERE recovery_code_hash = ?
         `).bind(recoveryHash).first();
@@ -201,6 +248,10 @@ export default {
         return json({
           success: true,
           userId: user.user_id,
+          profile: {
+            name: user.display_name || "",
+            avatar: user.avatar || ""
+          },
           sessionToken: session.token,
           expiresAt: session.expires,
           message: "Account recovered"
@@ -229,9 +280,15 @@ export default {
         // RESTORE DATA
         if (request.method === "GET") {
           const data = await env.DB.prepare(`
-            SELECT core_data, addon_data, updated_at
-            FROM user_data
-            WHERE user_id = ?
+            SELECT
+              ud.core_data,
+              ud.addon_data,
+              ud.updated_at,
+              u.display_name,
+              u.avatar
+            FROM user_data ud
+            JOIN users u ON u.user_id = ud.user_id
+            WHERE ud.user_id = ?
           `).bind(user.user_id).first();
 
           if (!data) {
@@ -244,6 +301,10 @@ export default {
             success: true,
             coreData: JSON.parse(data.core_data),
             addonData: JSON.parse(data.addon_data),
+            profile: {
+              name: data.display_name || "",
+              avatar: data.avatar || ""
+            },
             updatedAt: data.updated_at
           });
         }
@@ -263,6 +324,7 @@ export default {
         const coreData = JSON.stringify(body.coreData);
         const addonData = JSON.stringify(body.addonData);
 
+        // Save study data
         await env.DB.prepare(`
           UPDATE user_data
           SET core_data = ?,
@@ -276,9 +338,44 @@ export default {
           user.user_id
         ).run();
 
+        // Save profile details to users table
+        const savedProfile =
+          body.profile ||
+          (
+            body.addonData &&
+            typeof body.addonData === "object"
+              ? body.addonData.guestProfile
+              : null
+          );
+
+        if (savedProfile) {
+          const profile = validateProfile(
+            savedProfile.name,
+            savedProfile.avatar
+          );
+
+          if (!profile) {
+            return json({
+              error: "Invalid profile details"
+            }, 400);
+          }
+
+          await env.DB.prepare(`
+            UPDATE users
+            SET display_name = ?,
+                avatar = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+          `).bind(
+            profile.displayName,
+            profile.avatar,
+            user.user_id
+          ).run();
+        }
+
         return json({
           success: true,
-          message: "Cloud sync saved"
+          message: "Cloud sync and profile saved"
         });
       }
 
