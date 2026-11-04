@@ -1,4 +1,3 @@
-
 const SESSION_DAYS = 30;
 const MAX_BODY_SIZE = 1024 * 1024;
 const MAX_NAME_LENGTH = 40;
